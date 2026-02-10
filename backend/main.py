@@ -1,18 +1,34 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from agent.graph import build_graph, run_browser_task
 from agent.schema import UserInput, AgentState
 
 app = FastAPI()
 graph = build_graph()
 
-@app.post("/plan")
-def plan(input: UserInput):
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/execute")
+async def execute_task(
+    input: UserInput,
+    background_tasks: BackgroundTasks
+):
+    # Step 1: Plan
     state = AgentState(user_input=input)
     result = graph.invoke(state)
-    return {"task_prompt": result.final_prompt}
+    task_prompt = result["final_prompt"]
 
-@app.post("/run-browser-task")
-async def run_task():
-    print("Running from main")
-    await run_browser_task()
-    return {"status": "completed"}
+    print(f"Queued browser task: {task_prompt}")
+
+    # Step 2: Run browser OUTSIDE request lifecycle
+    background_tasks.add_task(run_browser_task, task_prompt)
+
+    return {
+        "task_prompt": task_prompt,
+        "execution_status": "started"
+    }
