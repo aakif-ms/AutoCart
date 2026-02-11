@@ -6,7 +6,7 @@ import { executeTask, type ProductInput } from "@/services/api";
 export default function Home() {
   const [website, setWebsite] = useState("");
   const [products, setProducts] = useState<ProductInput[]>([
-    { name: "", max_price: undefined, max_rating: undefined, quantity: 1 },
+    { name: "", max_price: undefined, quantity: 1 },
   ]);
   const [status, setStatus] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -17,7 +17,7 @@ export default function Home() {
 
     try {
       const validProducts = products.filter(p => p.name.trim() !== "");
-      
+
       if (validProducts.length === 0) {
         setStatus("Please add at least one product");
         return;
@@ -29,7 +29,7 @@ export default function Home() {
       });
 
       setPrompt(response.task_prompt);
-      setStatus(`Task completed: ${response.execution_status}`);
+      setStatus(`Task started: ${response.execution_status}`);
     } catch (error) {
       console.error("Error executing task:", error);
       setStatus("Error occurred while executing task");
@@ -63,6 +63,7 @@ export default function Home() {
           >
             <h2 className="font-bold">Product {i + 1}</h2>
 
+            {/* Product Name */}
             <input
               className="w-full border-2 border-black px-3 py-2"
               placeholder="Product name"
@@ -74,34 +75,24 @@ export default function Home() {
               }}
             />
 
+            {/* Price + Quantity */}
             <div className="flex gap-4">
               <input
-                className="w-1/3 border-2 border-black px-3 py-2"
+                className="w-1/2 border-2 border-black px-3 py-2"
                 placeholder="Max price (₹)"
                 type="number"
                 value={p.max_price || ""}
                 onChange={(e) => {
                   const copy = [...products];
-                  copy[i].max_price = e.target.value ? Number(e.target.value) : undefined;
+                  copy[i].max_price = e.target.value
+                    ? Number(e.target.value)
+                    : undefined;
                   setProducts(copy);
                 }}
               />
+
               <input
-                className="w-1/3 border-2 border-black px-3 py-2"
-                placeholder="Max rating (1-5)"
-                type="number"
-                min="1"
-                max="5"
-                step="0.1"
-                value={p.max_rating || ""}
-                onChange={(e) => {
-                  const copy = [...products];
-                  copy[i].max_rating = e.target.value ? Number(e.target.value) : undefined;
-                  setProducts(copy);
-                }}
-              />
-              <input
-                className="w-1/3 border-2 border-black px-3 py-2"
+                className="w-1/2 border-2 border-black px-3 py-2"
                 placeholder="Quantity"
                 type="number"
                 min="1"
@@ -120,7 +111,10 @@ export default function Home() {
       {/* Add Product */}
       <button
         onClick={() =>
-          setProducts([...products, { name: "", max_price: undefined, max_rating: undefined, quantity: 1 }])
+          setProducts([
+            ...products,
+            { name: "", max_price: undefined, quantity: 1 },
+          ])
         }
         className="mt-6 border-4 border-black px-6 py-2 font-bold hover:bg-black hover:text-white transition"
       >
