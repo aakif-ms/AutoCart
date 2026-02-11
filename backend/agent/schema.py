@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Literal
 class ProductInput(BaseModel):
     name: str
     max_price: Optional[int] = None
+    rating: Optional[str] = None
     quantity: int = 1
     
 class UserInput(BaseModel):
