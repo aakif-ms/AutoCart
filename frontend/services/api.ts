@@ -4,6 +4,7 @@ export interface ProductInput {
   name: string;
   max_price?: number;
   quantity: number;
+  rating: string;
 }
 
 export interface UserInput {
