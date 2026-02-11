@@ -2,6 +2,7 @@ import os
 from langgraph.graph import StateGraph
 from langchain_openai import ChatOpenAI as LangChainChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from browser_use import Agent, Browser, ChatOpenAI as BrowserChatOpenAI
 from agent.schema import AgentState
 from dotenv import load_dotenv
@@ -10,156 +11,171 @@ from vault import VAULT
 
 load_dotenv()
 
-llm_graph = LangChainChatOpenAI(model="gpt-4.1-mini")
+llm_graph = LangChainChatOpenAI(model="gpt-4o-mini", temperature=0)
 llm_browser = BrowserChatOpenAI(model="gpt-4o-mini")
 
-def validate_input(state):
-    if not state.user_input.products:
-        raise ValueError("At least one product required")
+def understand_intent(state):
+    print("-------Reached understand node------------")
+
+    prompt = f"""
+    You are an intelligent shopping task analyst.
+
+    Analyze this shopping request and extract:
+    - Core user goal
+    - Shopping intent type (bulk, comparison, urgent, budget, premium, etc.)
+    - Constraints (price limits, quantity, brand sensitivity)
+    - Risk factors (login, captcha, delivery restriction, pincode issues)
+
+    Website: {state.user_input.website}
+    Products: {[(p.name, p.quantity, p.max_price) for p in state.user_input.products]}
+
+    Return a structured reasoning paragraph.
+    """
     
-    # Basic validation for product names
-    for product in state.user_input.products:
-        if not product.name.strip():
-            raise ValueError("Product name cannot be empty")
-        if product.quantity <= 0:
-            raise ValueError("Product quantity must be greater than 0")
-    
+    response = llm_graph.invoke(prompt)
+    state.intent_analysis = response.content
     return state
 
-def normalize_website(state):
-    site = state.user_input.website.lower()
+
+def build_strategy(state):
+    print("-------Reached startegy node------------")
+    prompt = f"""
+    You are an e-commerce navigation strategist.
+
+    Given this website and intent analysis, decide:
+
+    - Whether login should be avoided or bypassed
+    - How to safely handle popups and delivery pincode prompts
+    - Optimal search strategy (search bar vs categories)
+    - Price filtering logic
+    - Safe stopping condition
+
+    Website: {state.user_input.website}
+    Intent analysis:
+    {state.intent_analysis}
+
+    Return a concise execution strategy paragraph.
+    """
     
-    if "amazon" in site:
-        state.normalized_site = "https://www.amazon.in"
-        state.requires_login = True
-    elif "flipkart" in site:
-        state.normalized_site = "https://www.flipkart.com"
-        state.requires_login = True
-    else:
-        # For other websites, just add https if missing
-        if not site.startswith('http'):
-            state.normalized_site = f"https://{site}"
-        else:
-            state.normalized_site = site
-        state.requires_login = False
-    
+    response = llm_graph.invoke(prompt)
+    state.execution_strategy = response.content
+    return state
+   
+def plan_products(state):
+    print("-------Reached plan product node------------")
+    prompt = f"""
+    You are a shopping automation planner.
+
+    For each product below, generate a high-level action plan:
+    - How to search
+    - How to filter
+    - How to choose the best item
+    - How many units to add
+
+    Products:
+    {[(p.name, p.quantity, p.max_price) for p in state.user_input.products]}
+
+    Return a clear product-by-product action reasoning paragraph.
+    """
+    response = llm_graph.invoke(prompt)
+    state.product_plan = response.content
     return state
 
-def product_reasoning(state):
-    for product in state.user_input.products:
-        product.name = product.name.strip()
-        product.name = ' '.join(product.name.split())
-    
+def safety_evaluator(state):
+    print("-------Reached evaluator node------------")
+    prompt = f"""
+    You are a browser automation risk assessor.
+
+    Analyze the following strategy and product plan.
+    Identify potential failure triggers:
+    - CAPTCHA
+    - Login wall
+    - OTP
+    - Payment redirect
+    - Infinite scroll traps
+    - Sponsored manipulation
+
+    Provide safeguards and strict stop conditions.
+
+    Strategy:
+    {state.execution_strategy}
+
+    Product Plan:
+    {state.product_plan}
+    """
+
+    response = llm_graph.invoke(prompt)
+    state.safety_plan = response.content
     return state
 
-# def credential_check(state):
-#     if not state.requires_login:
-#         return state
-        
-#     key = state.normalized_site.replace("https://", "").replace("www.", "")
-#     if key in VAULT:
-#         state.credentials = VAULT[key]
-    
-#     return state
-
-def build_prompt(state):
-    
-    SYSTEM_PROMPT = """
+def synthesize_task(state):
+    print("-------Reached synthesize node------------")
+    SYSTEM = """
     You generate ONE executable natural-language task for a browser automation agent.
 
-    Hard rules:
-    - Output ONLY a single string
+    Hard Rules:
+    - Output ONLY one paragraph
     - No markdown
     - No bullet points
     - No explanations
-    - No step numbers
     - Imperative tone
-    - Assume a real browser
-    - The agent must stop safely
-    - Avoid clicking on any login or sign in buttons
+    - Real browser assumption
+    - After visiting the website always close the pop ups first, close all the pop ups then proceed to next step.
+    - If asked for pincode use 226016 and then hit apply.
+    - First search then dont explicitly apply the filter just check the price and then add it to the cart, dont go to the filter column.
+    - Must stop safely
+    - Never proceed to checkout
     """
 
-    USER_PROMPT = """
-    Use the following behavioral instructions and constraints to generate the final task.
+    USER = f"""
+    Website: {state.user_input.website}
 
-    Agent identity and startup:
-    "You are an autonomous browser agent. Visit {website} using a real browser."+
-    Close any pop-us if available.
-    Login behavior:
-    If asked for pincode, use 226016
-    {login_instructions}
+    Intent Analysis:
+    {state.intent_analysis}
 
-    Product actions:
-    {product_instructions}
+    Execution Strategy:
+    {state.execution_strategy}
 
-    Safety constraints:
-    "Do NOT proceed to checkout or payment under any circumstances."
-    "If a payment page, OTP request, CAPTCHA, or unexpected verification appears, immediately stop and abort the task."
-    "Stop execution once all products are added to the cart."
+    Product Plan:
+    {state.product_plan}
 
-    Generate the final browser-executable task instruction as a single clear paragraph.
+    Safety Plan:
+    {state.safety_plan}
+
+    Generate the final browser-executable instruction.
     """
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        ("user", USER_PROMPT),
-    ])
     
-    if state.credentials:
-        login_instructions = (
-            "Close the login box if possible, but if forced to login, "
-            "sign in using the existing browser profile. "
-            "If login fails or a CAPTCHA appears, immediately stop and abort the task."
-        )
-    else:
-        login_instructions = "Do not attempt to log in."
-
-    # ---- product rules ----
-    product_lines = []
-    for p in state.user_input.products:
-        line = f"Search for '{p.name}'."
-
-        if p.max_price:
-            line += f" Filter results under ₹{p.max_price}."
-
-        # if p.min_rating:
-        #     line += f" Only consider products with rating above {p.min_rating} stars."
-
-        line += " Select the best available matching product and add exactly one unit to the cart."
-        product_lines.append(line)
-
-    product_instructions = " ".join(product_lines)
-
-    messages = prompt.format_messages(
-        website=state.normalized_site,
-        login_instructions=login_instructions,
-        product_instructions=product_instructions
-    )
-
+    messages = [
+        ("system", SYSTEM),
+        ("user", USER)
+    ]
+    
     response = llm_graph.invoke(messages)
-
     state.final_prompt = response.content
-    state.status = "planned"
     return state
-
-
+   
 def build_graph():
     graph = StateGraph(AgentState)
 
-    graph.add_node("validate", validate_input)
-    graph.add_node("normalize", normalize_website)
-    graph.add_node("reason", product_reasoning)
-    # graph.add_node("creds", credential_check)
-    graph.add_node("prompt", build_prompt)
+    graph.add_node("intent", understand_intent)
+    graph.add_node("strategy", build_strategy)
+    graph.add_node("product_plan", plan_products)
+    graph.add_node("safety", safety_evaluator)
+    graph.add_node("synthesize", synthesize_task)
 
-    graph.set_entry_point("validate")
-    graph.add_edge("validate", "normalize")
-    graph.add_edge("normalize", "reason")
-    # graph.add_edge("reason", "creds")
-    graph.add_edge("reason", "prompt")
-    graph.set_finish_point("prompt")
-    
+    graph.set_entry_point("intent")
+
+    graph.add_edge("intent", "strategy")
+    graph.add_edge("strategy", "product_plan")
+    graph.add_edge("product_plan", "safety")
+    graph.add_edge("safety", "synthesize")
+
+    graph.set_finish_point("synthesize")
+
     return graph.compile()
+   
+
+    
 
 async def run_browser_task(task_prompt: str ):
     print("--------Reached browser node---------")
@@ -175,9 +191,6 @@ async def run_browser_task(task_prompt: str ):
         llm=llm_browser,
     )
 
-    try:
-        await agent.run()
-        print("Finished running")
-        return {"status": "completed"}
-    finally:
-        await browser.kill() 
+    await agent.run()
+    print("Finished running")
+    return {"status": "completed"}

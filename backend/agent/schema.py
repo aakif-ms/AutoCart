@@ -4,7 +4,6 @@ from typing import List, Optional, Dict, Literal
 class ProductInput(BaseModel):
     name: str
     max_price: Optional[int] = None
-    max_rating: Optional[float] = None
     quantity: int = 1
     
 class UserInput(BaseModel):
@@ -16,12 +15,10 @@ class AgentState(BaseModel):
     normalized_site: Optional[str] = None
     requires_login: bool = False
     credentials: Optional[Dict[str, str]] = None
-    final_prompt: Optional[str] = None
 
-    status: Literal[
-        "idle",
-        "planned",
-        "running",
-        "aborted",
-        "completed",
-    ] = "idle"
+    intent_analysis: Optional[str] = None
+    execution_strategy: Optional[str] = None
+    product_plan: Optional[str] = None
+    safety_plan: Optional[str] = None
+    
+    final_prompt: Optional[str] = None

@@ -16,16 +16,14 @@ app.add_middleware(
 @app.post("/execute")
 async def execute_task(
     input: UserInput,
-    background_tasks: BackgroundTasks
-):
-    # Step 1: Plan
+    background_tasks: BackgroundTasks):
+
     state = AgentState(user_input=input)
     result = graph.invoke(state)
     task_prompt = result["final_prompt"]
 
     print(f"Queued browser task: {task_prompt}")
 
-    # Step 2: Run browser OUTSIDE request lifecycle
     background_tasks.add_task(run_browser_task, task_prompt)
 
     return {
