@@ -12,6 +12,9 @@ AutoCart is an intelligent automation system that navigates e-commerce websites 
 - **⚡ Real-time Execution**: Live status updates and task monitoring
 - **🔐 Secure Credentials**: Vault system for storing login credentials when needed
 
+## Demo Video
+https://github.com/user-attachments/assets/6342e91f-7bc5-46c8-9bf3-8939c1f0cbed
+
 ## 🏗️ Architecture
 
 ### Frontend (Next.js + TypeScript)
