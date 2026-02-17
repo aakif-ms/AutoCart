@@ -11,7 +11,7 @@ load_dotenv()
 
 llm_graph = LangChainChatOpenAI(model="gpt-4o-mini", temperature=0)
 # llm_browser = BrowserChatOpenAI(model="gpt-4o-mini")
-llm_browser = ChatBrowserUse(model="bu-latest")
+llm_browser = ChatBrowserUse(model="bu-2-0")
 
 def understand_intent(state):
     print("--------Reached understand node-------------")
@@ -144,6 +144,7 @@ def synthesize_task(state):
     - Do NOT navigate to checkout
     - Do NOT initiate payment
     - Do NOT continue browsing after cart completion
+    - Do NOT close the browser.
     """
 
     USER = f"""
@@ -200,7 +201,8 @@ async def run_browser_task(task_prompt: str):
     browser = Browser(
         executable_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         user_data_dir=os.path.join(os.getcwd(), ".chrome-profile"),
-        headless=False
+        headless=False,
+        keep_alive=True
     )
 
     agent = Agent(
